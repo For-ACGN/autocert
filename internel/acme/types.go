@@ -386,6 +386,11 @@ func WithOrderNotAfter(t time.Time) OrderOption {
 	return orderNotAfterOpt(t)
 }
 
+// WithOrderProfile sets order's Profile field.
+func WithOrderProfile(profile string) OrderOption {
+	return orderProfileOpt(profile)
+}
+
 type orderNotBeforeOpt time.Time
 
 func (orderNotBeforeOpt) privateOrderOpt() {}
@@ -393,6 +398,10 @@ func (orderNotBeforeOpt) privateOrderOpt() {}
 type orderNotAfterOpt time.Time
 
 func (orderNotAfterOpt) privateOrderOpt() {}
+
+type orderProfileOpt string
+
+func (orderProfileOpt) privateOrderOpt() {}
 
 // Authorization encodes an authorization response.
 type Authorization struct {
