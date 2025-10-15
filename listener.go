@@ -18,37 +18,57 @@ type Config struct {
 	Client  *acme.Client
 }
 
-type tlsListener struct {
+type acListener struct {
+	network string
+	port    string
+
 	listener  net.Listener
 	manager   *autocert.Manager
 	tlsConfig *tls.Config
+
+	portmap *portmap
+	http01  *http01
 }
 
 // Listen is used to listen a TLS listener with ACME.
-func Listen(network, address string) (net.Listener, error) {
+func Listen(network, address string, config *Config) (net.Listener, error) {
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	var allowList []string
+	allowList = append(allowList, config.Domains...)
+	allowList = append(allowList, config.IPAddrs...)
+	if len(allowList) < 1 {
+		return nil, errors.New("must provide at least one domain or ip address")
+	}
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return nil, err
 	}
 	manager := &autocert.Manager{
-		Prompt: autocert.AcceptTOS,
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(allowList...),
 	}
-	tl := &tlsListener{
+	tl := &acListener{
+		network:   network,
+		port:      port,
 		listener:  listener,
 		manager:   manager,
 		tlsConfig: manager.TLSConfig(),
 	}
-	// dont need port forward
+	// dont need port map or HTTP01
 	if strings.Contains(address, ":443") {
 		return tl, nil
 	}
-
 	err = tryBindPort("443")
 	if err == nil {
+		tl.portmap = newPortmap(network, port)
 		return tl, nil
 	}
 	err = tryBindPort("80")
 	if err == nil {
+		tl.http01 = newHTTP01(manager.HTTPHandler(nil))
 		return tl, nil
 	}
 	return nil, errors.New("failed to bind port 443 and 80 for ACME")
@@ -62,7 +82,7 @@ func tryBindPort(port string) error {
 	return listener.Close()
 }
 
-func (l *tlsListener) Accept() (net.Conn, error) {
+func (l *acListener) Accept() (net.Conn, error) {
 	conn, err := l.listener.Accept()
 	if err != nil {
 		return nil, err
@@ -82,10 +102,10 @@ func (l *tlsListener) Accept() (net.Conn, error) {
 	return tls.Server(tcpConn, l.tlsConfig), nil
 }
 
-func (l *tlsListener) Addr() net.Addr {
+func (l *acListener) Addr() net.Addr {
 	return l.listener.Addr()
 }
 
-func (l *tlsListener) Close() error {
+func (l *acListener) Close() error {
 	return l.listener.Close()
 }
