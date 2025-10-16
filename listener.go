@@ -1,8 +1,10 @@
 package autocert
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -19,8 +21,9 @@ type Config struct {
 }
 
 type acListener struct {
-	network string
-	port    string
+	network  string
+	port     string
+	hostList []string
 
 	listener  net.Listener
 	manager   *autocert.Manager
@@ -32,6 +35,11 @@ type acListener struct {
 
 // Listen is used to listen a TLS listener with ACME.
 func Listen(network, address string, config *Config) (net.Listener, error) {
+	return ListenContext(context.Background(), network, address, config)
+}
+
+// ListenContext is used to listen a TLS listener with context.
+func ListenContext(ctx context.Context, network, address string, config *Config) (net.Listener, error) {
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -53,6 +61,7 @@ func Listen(network, address string, config *Config) (net.Listener, error) {
 	tl := &acListener{
 		network:   network,
 		port:      port,
+		hostList:  allowList,
 		listener:  listener,
 		manager:   manager,
 		tlsConfig: manager.TLSConfig(),
@@ -61,12 +70,12 @@ func Listen(network, address string, config *Config) (net.Listener, error) {
 	if strings.Contains(address, ":443") {
 		return tl, nil
 	}
-	err = tryBindPort("443")
+	err = tryBindPort(ctx, "443")
 	if err == nil {
 		tl.portmap = newPortmap(network, port)
 		return tl, nil
 	}
-	err = tryBindPort("80")
+	err = tryBindPort(ctx, "80")
 	if err == nil {
 		tl.http01 = newHTTP01(manager.HTTPHandler(nil))
 		return tl, nil
@@ -74,12 +83,40 @@ func Listen(network, address string, config *Config) (net.Listener, error) {
 	return nil, errors.New("failed to bind port 443 and 80 for ACME")
 }
 
-func tryBindPort(port string) error {
-	listener, err := net.Listen("tcp", ":"+port)
-	if err != nil {
-		return err
+func tryBindPort(ctx context.Context, port string) error {
+	for i := 0; i < 3; i++ {
+		listener, err := net.Listen("tcp", ":"+port)
+		if err != nil {
+			select {
+			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			continue
+		}
+		return listener.Close()
 	}
-	return listener.Close()
+	return fmt.Errorf("failed to bind port: %s", port)
+}
+
+func (l *acListener) startChallenge() error {
+	if l.portmap != nil {
+		return l.portmap.Start()
+	}
+	if l.http01 != nil {
+		return l.http01.Start()
+	}
+	return nil
+}
+
+func (l *acListener) stopChallenge() error {
+	if l.portmap != nil {
+		return l.portmap.Stop()
+	}
+	if l.http01 != nil {
+		return l.http01.Stop()
+	}
+	return nil
 }
 
 func (l *acListener) Accept() (net.Conn, error) {
