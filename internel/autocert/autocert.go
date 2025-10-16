@@ -518,6 +518,15 @@ func (m *Manager) cacheGet(ctx context.Context, ck certKey) (*tls.Certificate, e
 }
 
 func (m *Manager) cachePut(ctx context.Context, ck certKey, tlscert *tls.Certificate) error {
+	// wait some time that let CA finish CT sync.
+	if !ck.isToken {
+		select {
+		case <-time.After(time.Minute):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	if m.Cache == nil {
 		return nil
 	}
