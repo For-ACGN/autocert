@@ -26,6 +26,6 @@ func (h *http01) Start() error {
 	return nil
 }
 
-func (h *http01) Close() error {
+func (h *http01) Stop() error {
 	return h.server.Close()
 }
