@@ -1,6 +1,7 @@
 package autocert
 
 import (
+	"context"
 	"io"
 	"net"
 )
@@ -18,11 +19,12 @@ func newPortmap(network, port string) *portmap {
 	}
 }
 
-func (p *portmap) Start() error {
-	listener, err := net.Listen("tcp", ":443")
+func (p *portmap) Start(ctx context.Context) error {
+	listener, err := tryBindListener(ctx, "443")
 	if err != nil {
 		return err
 	}
+	p.listener = listener
 	go func() {
 		for {
 			conn, err := listener.Accept()

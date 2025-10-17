@@ -1,7 +1,7 @@
 package autocert
 
 import (
-	"net"
+	"context"
 	"net/http"
 )
 
@@ -15,8 +15,8 @@ func newHTTP01(handler http.Handler) *http01 {
 	}
 }
 
-func (h *http01) Start() error {
-	listener, err := net.Listen("tcp", ":80")
+func (h *http01) Start(ctx context.Context) error {
+	listener, err := tryBindListener(ctx, "80")
 	if err != nil {
 		return err
 	}
@@ -26,6 +26,6 @@ func (h *http01) Start() error {
 	return nil
 }
 
-func (h *http01) Stop() error {
-	return h.server.Close()
+func (h *http01) Stop(ctx context.Context) error {
+	return h.server.Shutdown(ctx)
 }
