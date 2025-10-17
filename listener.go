@@ -54,18 +54,21 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 	if err != nil {
 		return nil, err
 	}
-	manager := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(allowList...),
-	}
 	tl := &acListener{
-		network:   network,
-		port:      port,
-		hostList:  allowList,
-		listener:  listener,
-		manager:   manager,
-		tlsConfig: manager.TLSConfig(),
+		network:  network,
+		port:     port,
+		hostList: allowList,
+		listener: listener,
 	}
+	manager := &autocert.Manager{
+		Prompt:       autocert.AcceptTOS,
+		HostPolicy:   autocert.HostWhitelist(allowList...),
+		Client:       config.Client,
+		BeforeVerify: tl.startChallenge,
+		AfterVerify:  tl.stopChallenge,
+	}
+	tl.manager = manager
+	tl.tlsConfig = manager.TLSConfig()
 	// dont need port map or HTTP01
 	if strings.Contains(address, ":443") {
 		return tl, nil
@@ -117,6 +120,10 @@ func (l *acListener) stopChallenge() error {
 		return l.http01.Stop()
 	}
 	return nil
+}
+
+func (l *acListener) trigger() {
+	// l.manager.GetCertificate()
 }
 
 func (l *acListener) Accept() (net.Conn, error) {
