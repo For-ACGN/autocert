@@ -175,6 +175,12 @@ type Manager struct {
 	// See RFC 8555, Section 7.3.4 for more details.
 	ExternalAccountBinding *acme.ExternalAccountBinding
 
+	// BeforeVerify is used to set a hook before verifyRFC.
+	BeforeVerify func() error
+
+	// AfterVerify is used to set a hook after verifyRFC.
+	AfterVerify func() error
+
 	clientMu sync.Mutex
 	client   *acme.Client // initialized by acmeClient method
 
@@ -521,7 +527,7 @@ func (m *Manager) cachePut(ctx context.Context, ck certKey, tlscert *tls.Certifi
 	// wait some time that let CA finish CT sync.
 	if !ck.isToken {
 		select {
-		case <-time.After(time.Minute):
+		case <-time.After(20 * time.Second):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -699,6 +705,14 @@ func (m *Manager) authorizedCert(ctx context.Context, key crypto.Signer, ck cert
 // verifyRFC runs the identifier (domain) order-based authorization flow for RFC compliant CAs
 // using each applicable ACME challenge type.
 func (m *Manager) verifyRFC(ctx context.Context, client *acme.Client, domain string) (*acme.Order, error) {
+	if m.BeforeVerify != nil {
+		err := m.BeforeVerify()
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer func() { _ = m.AfterVerify() }()
+
 	// Try each supported challenge type starting with a new order each time.
 	// The nextTyp index of the next challenge type to try is shared across
 	// all order authorizations: if we've tried a challenge type once and it didn't work,
