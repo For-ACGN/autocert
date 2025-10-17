@@ -176,10 +176,10 @@ type Manager struct {
 	ExternalAccountBinding *acme.ExternalAccountBinding
 
 	// BeforeVerify is used to set a hook before verifyRFC.
-	BeforeVerify func() error
+	BeforeVerify func(ctx context.Context) error
 
 	// AfterVerify is used to set a hook after verifyRFC.
-	AfterVerify func() error
+	AfterVerify func(ctx context.Context) error
 
 	clientMu sync.Mutex
 	client   *acme.Client // initialized by acmeClient method
@@ -706,12 +706,12 @@ func (m *Manager) authorizedCert(ctx context.Context, key crypto.Signer, ck cert
 // using each applicable ACME challenge type.
 func (m *Manager) verifyRFC(ctx context.Context, client *acme.Client, domain string) (*acme.Order, error) {
 	if m.BeforeVerify != nil {
-		err := m.BeforeVerify()
+		err := m.BeforeVerify(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
-	defer func() { _ = m.AfterVerify() }()
+	defer func() { _ = m.AfterVerify(ctx) }()
 
 	// Try each supported challenge type starting with a new order each time.
 	// The nextTyp index of the next challenge type to try is shared across
