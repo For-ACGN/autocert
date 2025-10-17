@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/For-ACGN/autocert/internel/acme"
-	"github.com/For-ACGN/autocert/internel/autocert"
+	"github.com/For-ACGN/autocert/acme"
+	"github.com/For-ACGN/autocert/certmgr"
 )
 
 // Config contains configuration about ACME Manager.
 type Config struct {
 	Domains []string
 	IPAddrs []string
-	Cache   autocert.Cache
+	Cache   certmgr.Cache
 	Client  *acme.Client
 }
 
@@ -29,7 +29,7 @@ type acListener struct {
 	hostList []string
 
 	listener  net.Listener
-	manager   *autocert.Manager
+	manager   *certmgr.Manager
 	tlsConfig *tls.Config
 
 	portmap *portmap
@@ -58,7 +58,7 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 	if cache == nil {
 		err = os.MkdirAll("certs", 0700)
 		if err == nil {
-			cache = autocert.DirCache("certs")
+			cache = certmgr.DirCache("certs")
 		}
 	}
 	listener, err := net.Listen(network, address)
@@ -71,9 +71,9 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 		hostList: allowList,
 		listener: listener,
 	}
-	manager := &autocert.Manager{
-		Prompt:       autocert.AcceptTOS,
-		HostPolicy:   autocert.HostWhitelist(allowList...),
+	manager := &certmgr.Manager{
+		Prompt:       certmgr.AcceptTOS,
+		HostPolicy:   certmgr.HostWhitelist(allowList...),
 		Cache:        cache,
 		Client:       config.Client,
 		BeforeVerify: tl.startChallenge,
