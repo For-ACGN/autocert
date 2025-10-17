@@ -34,7 +34,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/For-ACGN/autocert/internel/acme"
+	"github.com/For-ACGN/autocert/acme"
 )
 
 // CAServer is a simple test server which implements ACME spec bits needed for testing.

@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package autocert provides automatic access to certificates from Let's Encrypt
+// Package certmgr provides automatic access to certificates from Let's Encrypt
 // and any other ACME-based CA.
 //
 // This package is a work in progress and makes no API stability promises.
-package autocert
+package certmgr
 
 import (
 	"bytes"
@@ -31,8 +31,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/For-ACGN/autocert/internel/acme"
 	"golang.org/x/net/idna"
+
+	"github.com/For-ACGN/autocert/acme"
 )
 
 // DefaultACMEDirectory is the default ACME Directory URL used when the Manager's Client is nil.

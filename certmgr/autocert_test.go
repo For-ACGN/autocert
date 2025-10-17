@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package autocert
+package certmgr
 
 import (
 	"bytes"
@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/For-ACGN/autocert/internel/acme"
-	"github.com/For-ACGN/autocert/internel/autocert/internal/acmetest"
+	"github.com/For-ACGN/autocert/acme"
+	"github.com/For-ACGN/autocert/certmgr/internal/acmetest"
 )
 
 var (

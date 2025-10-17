@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package autocert_test
+package certmgr_test
 
 import (
 	"fmt"
 	"log"
 	"net/http"
 
-	"github.com/For-ACGN/autocert/internel/autocert"
+	"github.com/For-ACGN/autocert/certmgr"
 )
 
 func ExampleNewListener() {
@@ -17,15 +17,15 @@ func ExampleNewListener() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, TLS user! Your config: %+v", r.TLS)
 	})
-	log.Fatal(http.Serve(autocert.NewListener("example.com"), mux))
+	log.Fatal(http.Serve(certmgr.NewListener("example.com"), mux))
 }
 
 func ExampleManager() {
-	m := &autocert.Manager{
-		Cache:      autocert.DirCache("secret-dir"),
-		Prompt:     autocert.AcceptTOS,
+	m := &certmgr.Manager{
+		Cache:      certmgr.DirCache("secret-dir"),
+		Prompt:     certmgr.AcceptTOS,
 		Email:      "example@example.org",
-		HostPolicy: autocert.HostWhitelist("example.org", "www.example.org"),
+		HostPolicy: certmgr.HostWhitelist("example.org", "www.example.org"),
 	}
 	s := &http.Server{
 		Addr:      ":https",

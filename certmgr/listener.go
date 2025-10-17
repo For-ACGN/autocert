@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package autocert
+package certmgr
 
 import (
 	"crypto/tls"
@@ -22,7 +22,7 @@ import (
 //	log.Fatal(http.Serve(autocert.NewListener("example.com"), handler))
 //
 // NewListener is a convenience function for a common configuration.
-// More complex or custom configurations can use the autocert.Manager
+// More complex or custom configurations can use the certmgr.Manager
 // type instead.
 //
 // Use of this function implies acceptance of the LetsEncrypt Terms of
