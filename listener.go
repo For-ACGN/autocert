@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 type Config struct {
 	Domains []string
 	IPAddrs []string
+	Cache   autocert.Cache
 	Client  *acme.Client
 }
 
@@ -50,6 +53,14 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 	if len(allowList) < 1 {
 		return nil, errors.New("must provide at least one domain or ip address")
 	}
+	// prepare certificate cache directory
+	cache := config.Cache
+	if cache == nil {
+		err = os.MkdirAll("certs", 0700)
+		if err == nil {
+			cache = autocert.DirCache("certs")
+		}
+	}
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return nil, err
@@ -63,6 +74,7 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 	manager := &autocert.Manager{
 		Prompt:       autocert.AcceptTOS,
 		HostPolicy:   autocert.HostWhitelist(allowList...),
+		Cache:        cache,
 		Client:       config.Client,
 		BeforeVerify: tl.startChallenge,
 		AfterVerify:  tl.stopChallenge,
@@ -87,11 +99,13 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 }
 
 func tryBindPort(ctx context.Context, port string) error {
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < 3; i++ {
 		listener, err := net.Listen("tcp", ":"+port)
 		if err != nil {
+			wait := time.Duration(1+rd.Intn(5)) * time.Second
 			select {
-			case <-time.After(5 * time.Second):
+			case <-time.After(wait):
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -102,22 +116,40 @@ func tryBindPort(ctx context.Context, port string) error {
 	return fmt.Errorf("failed to bind port: %s", port)
 }
 
-func (l *acListener) startChallenge() error {
+func tryBindListener(ctx context.Context, port string) (net.Listener, error) {
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < 3; i++ {
+		listener, err := net.Listen("tcp", ":"+port)
+		if err != nil {
+			wait := time.Duration(1+rd.Intn(5)) * time.Second
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			continue
+		}
+		return listener, nil
+	}
+	return nil, fmt.Errorf("failed to bind listener on port: %s", port)
+}
+
+func (l *acListener) startChallenge(ctx context.Context) error {
 	if l.portmap != nil {
-		return l.portmap.Start()
+		return l.portmap.Start(ctx)
 	}
 	if l.http01 != nil {
-		return l.http01.Start()
+		return l.http01.Start(ctx)
 	}
 	return nil
 }
 
-func (l *acListener) stopChallenge() error {
+func (l *acListener) stopChallenge(ctx context.Context) error {
 	if l.portmap != nil {
 		return l.portmap.Stop()
 	}
 	if l.http01 != nil {
-		return l.http01.Stop()
+		return l.http01.Stop(ctx)
 	}
 	return nil
 }
