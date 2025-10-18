@@ -166,6 +166,32 @@ func (l *acListener) stopChallenge(ctx context.Context) error {
 	return nil
 }
 
+func (l *acListener) trigger() {
+	l.preprovision()
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for {
+		wait := time.Duration(rd.Intn(300)) * time.Second
+		select {
+		case <-time.After(wait):
+			l.preprovision()
+		case <-l.ctx.Done():
+			return
+		}
+	}
+}
+
+func (l *acListener) preprovision() {
+	for _, host := range l.hosts {
+		hello := &tls.ClientHelloInfo{
+			ServerName: host,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			},
+		}
+		_, _ = l.manager.GetCertificate(hello)
+	}
+}
+
 func (l *acListener) Accept() (net.Conn, error) {
 	conn, err := l.listener.Accept()
 	if err != nil {
