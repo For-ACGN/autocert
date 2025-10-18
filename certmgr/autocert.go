@@ -528,7 +528,7 @@ func (m *Manager) cachePut(ctx context.Context, ck certKey, tlscert *tls.Certifi
 	// wait some time that let CA finish CT sync.
 	if !ck.isToken {
 		select {
-		case <-time.After(20 * time.Second):
+		case <-time.After(30 * time.Second):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -959,10 +959,7 @@ func (m *Manager) stopRenew() {
 }
 
 func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
-	const keyName = "acme_account+key"
-
-	// Previous versions of autocert stored the value under a different key.
-	const legacyKeyName = "acme_account.key"
+	const keyName = "acme_account"
 
 	genKey := func() (*ecdsa.PrivateKey, error) {
 		return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -973,9 +970,6 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 	}
 
 	data, err := m.Cache.Get(ctx, keyName)
-	if err == ErrCacheMiss {
-		data, err = m.Cache.Get(ctx, legacyKeyName)
-	}
 	if err == ErrCacheMiss {
 		key, err := genKey()
 		if err != nil {
