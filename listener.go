@@ -24,9 +24,9 @@ type Config struct {
 }
 
 type acListener struct {
-	network  string
-	port     string
-	hostList []string
+	network string
+	port    string
+	hosts   []string
 
 	listener  net.Listener
 	manager   *certmgr.Manager
@@ -34,6 +34,9 @@ type acListener struct {
 
 	portmap *portmap
 	http01  *http01
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // Listen is used to listen a TLS listener with ACME.
@@ -61,14 +64,14 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 			cache = certmgr.DirCache("certs")
 		}
 	}
-	listener, err := net.Listen(network, address)
+	listener, err := listenContext(ctx, network, address)
 	if err != nil {
 		return nil, err
 	}
 	tl := &acListener{
 		network:  network,
 		port:     port,
-		hostList: allowList,
+		hosts:    allowList,
 		listener: listener,
 	}
 	manager := &certmgr.Manager{
@@ -81,18 +84,22 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 	}
 	tl.manager = manager
 	tl.tlsConfig = manager.TLSConfig()
+	tl.ctx, tl.cancel = context.WithCancel(context.Background())
 	// dont need port map or HTTP01
 	if strings.Contains(address, ":443") {
+		go tl.trigger()
 		return tl, nil
 	}
 	err = tryBindPort(ctx, "443")
 	if err == nil {
 		tl.portmap = newPortmap(network, port)
+		go tl.trigger()
 		return tl, nil
 	}
 	err = tryBindPort(ctx, "80")
 	if err == nil {
 		tl.http01 = newHTTP01(manager.HTTPHandler(nil))
+		go tl.trigger()
 		return tl, nil
 	}
 	return nil, errors.New("failed to bind port 443 and 80 for ACME")
@@ -101,7 +108,7 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 func tryBindPort(ctx context.Context, port string) error {
 	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < 3; i++ {
-		listener, err := net.Listen("tcp", ":"+port)
+		listener, err := listenContext(ctx, "tcp", ":"+port)
 		if err != nil {
 			wait := time.Duration(1+rd.Intn(5)) * time.Second
 			select {
@@ -119,7 +126,7 @@ func tryBindPort(ctx context.Context, port string) error {
 func tryBindListener(ctx context.Context, port string) (net.Listener, error) {
 	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < 3; i++ {
-		listener, err := net.Listen("tcp", ":"+port)
+		listener, err := listenContext(ctx, "tcp", ":"+port)
 		if err != nil {
 			wait := time.Duration(1+rd.Intn(5)) * time.Second
 			select {
@@ -132,6 +139,11 @@ func tryBindListener(ctx context.Context, port string) (net.Listener, error) {
 		return listener, nil
 	}
 	return nil, fmt.Errorf("failed to bind listener on port: %s", port)
+}
+
+func listenContext(ctx context.Context, network, address string) (net.Listener, error) {
+	var lc net.ListenConfig
+	return lc.Listen(ctx, network, address)
 }
 
 func (l *acListener) startChallenge(ctx context.Context) error {
@@ -152,10 +164,6 @@ func (l *acListener) stopChallenge(ctx context.Context) error {
 		return l.http01.Stop(ctx)
 	}
 	return nil
-}
-
-func (l *acListener) trigger() {
-	// l.manager.GetCertificate()
 }
 
 func (l *acListener) Accept() (net.Conn, error) {
@@ -183,5 +191,6 @@ func (l *acListener) Addr() net.Addr {
 }
 
 func (l *acListener) Close() error {
+	l.cancel()
 	return l.listener.Close()
 }
