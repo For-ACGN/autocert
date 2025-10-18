@@ -7,31 +7,41 @@ import (
 	"os"
 
 	"github.com/For-ACGN/autocert"
+	"github.com/For-ACGN/autocert/acme"
 )
+
+const letsEncryptTestURL = "https://acme-staging-v02.api.letsencrypt.org/directory"
 
 var (
 	domain string
 	ipAddr string
 	lAddr  string
+	test   bool
 )
 
 func init() {
 	flag.StringVar(&domain, "domain", "", "set domain for certificate")
 	flag.StringVar(&ipAddr, "ip", "", "set ip address for certificate")
 	flag.StringVar(&lAddr, "l", ":4000", "set http server address")
+	flag.BoolVar(&test, "t", false, "use test certificate")
 	flag.Parse()
 }
 
 func main() {
-	cfg := autocert.Config{}
+	config := autocert.Config{}
 	if domain != "" {
-		cfg.Domains = []string{domain}
+		config.Domains = []string{domain}
 	}
 	if ipAddr != "" {
-		cfg.IPAddrs = []string{ipAddr}
+		config.IPAddrs = []string{ipAddr}
+	}
+	if test {
+		config.Client = &acme.Client{
+			DirectoryURL: letsEncryptTestURL,
+		}
 	}
 
-	listener, err := autocert.Listen("tcp", lAddr, &cfg)
+	listener, err := autocert.Listen("tcp", lAddr, &config)
 	checkError(err)
 	fmt.Println("bind listener successfully")
 
