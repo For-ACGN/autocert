@@ -24,9 +24,7 @@ type Config struct {
 }
 
 type acListener struct {
-	network string
-	port    string
-	hosts   []string
+	hosts []string
 
 	listener  net.Listener
 	manager   *certmgr.Manager
@@ -69,8 +67,6 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 		return nil, err
 	}
 	tl := &acListener{
-		network:  network,
-		port:     port,
 		hosts:    allowList,
 		listener: listener,
 	}
