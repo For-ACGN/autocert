@@ -217,6 +217,7 @@ type certKey struct {
 	domain  string // without trailing dot
 	isRSA   bool   // RSA cert for legacy clients (as opposed to default ECDSA)
 	isToken bool   // tls-based challenge token cert; key type is undefined regardless of isRSA
+	isIP    bool   // is an ip address
 }
 
 func (c certKey) String() string {
@@ -262,21 +263,28 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if name == "" {
 		return nil, errors.New("acme/autocert: missing server name")
 	}
-	if !strings.Contains(strings.Trim(name, "."), ".") {
-		return nil, errors.New("acme/autocert: server name component count invalid")
-	}
 
-	// Note that this conversion is necessary because some server names in the handshakes
-	// started by some clients (such as cURL) are not converted to Punycode, which will
-	// prevent us from obtaining certificates for them. In addition, we should also treat
-	// example.com and EXAMPLE.COM as equivalent and return the same certificate for them.
-	// Fortunately, this conversion also helped us deal with this kind of mixedcase problems.
-	//
-	// Due to the "σςΣ" problem (see https://unicode.org/faq/idn.html#22), we can't use
-	// idna.Punycode.ToASCII (or just idna.ToASCII) here.
-	name, err := idna.Lookup.ToASCII(name)
-	if err != nil {
-		return nil, errors.New("acme/autocert: server name contains invalid character")
+	var isIP bool
+	if net.ParseIP(name) == nil {
+		if !strings.Contains(strings.Trim(name, "."), ".") {
+			return nil, errors.New("acme/autocert: server name component count invalid")
+		}
+
+		// Note that this conversion is necessary because some server names in the handshakes
+		// started by some clients (such as cURL) are not converted to Punycode, which will
+		// prevent us from obtaining certificates for them. In addition, we should also treat
+		// example.com and EXAMPLE.COM as equivalent and return the same certificate for them.
+		// Fortunately, this conversion also helped us deal with this kind of mixedcase problems.
+		//
+		// Due to the "σςΣ" problem (see https://unicode.org/faq/idn.html#22), we can't use
+		// idna.Punycode.ToASCII (or just idna.ToASCII) here.
+		var err error
+		name, err = idna.Lookup.ToASCII(name)
+		if err != nil {
+			return nil, errors.New("acme/autocert: server name contains invalid character")
+		}
+	} else {
+		isIP = true
 	}
 
 	// In the worst-case scenario, the timeout needs to account for caching, host policy,
@@ -306,6 +314,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	ck := certKey{
 		domain: strings.TrimSuffix(name, "."), // golang.org/issue/18114
 		isRSA:  !supportsECDSA(hello),
+		isIP:   isIP,
 	}
 	cert, err := m.cert(ctx, ck)
 	if err == nil {
@@ -687,7 +696,7 @@ func (m *Manager) authorizedCert(ctx context.Context, key crypto.Signer, ck cert
 		return nil, nil, errPreRFC
 	}
 
-	o, err := m.verifyRFC(ctx, client, ck.domain)
+	o, err := m.verifyRFC(ctx, client, ck)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -705,7 +714,7 @@ func (m *Manager) authorizedCert(ctx context.Context, key crypto.Signer, ck cert
 
 // verifyRFC runs the identifier (domain) order-based authorization flow for RFC compliant CAs
 // using each applicable ACME challenge type.
-func (m *Manager) verifyRFC(ctx context.Context, client *acme.Client, domain string) (*acme.Order, error) {
+func (m *Manager) verifyRFC(ctx context.Context, client *acme.Client, ck certKey) (*acme.Order, error) {
 	if m.BeforeVerify != nil {
 		err := m.BeforeVerify(ctx)
 		if err != nil {
@@ -722,7 +731,17 @@ func (m *Manager) verifyRFC(ctx context.Context, client *acme.Client, domain str
 	nextTyp := 0 // challengeTypes index
 AuthorizeOrderLoop:
 	for {
-		o, err := client.AuthorizeOrder(ctx, acme.DomainIDs(domain))
+		var (
+			id   []acme.AuthzID
+			opts []acme.OrderOption
+		)
+		if ck.isIP {
+			id = acme.IPIDs(ck.domain)
+			opts = append(opts, acme.WithOrderProfile("shortlived"))
+		} else {
+			id = acme.DomainIDs(ck.domain)
+		}
+		o, err := client.AuthorizeOrder(ctx, id, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -760,10 +779,10 @@ AuthorizeOrderLoop:
 				nextTyp++
 			}
 			if chal == nil {
-				return nil, fmt.Errorf("acme/autocert: unable to satisfy %q for domain %q: no viable challenge type found", z.URI, domain)
+				return nil, fmt.Errorf("acme/autocert: unable to satisfy %q for domain %q: no viable challenge type found", z.URI, ck.domain)
 			}
 			// Respond to the challenge and wait for validation result.
-			cleanup, err := m.fulfill(ctx, client, chal, domain)
+			cleanup, err := m.fulfill(ctx, client, chal, ck.domain)
 			if err != nil {
 				continue AuthorizeOrderLoop
 			}
