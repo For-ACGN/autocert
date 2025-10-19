@@ -16,6 +16,7 @@ func TestListen(t *testing.T) {
 
 	config := &Config{
 		Domains: []string{"example.com"},
+		IPAddrs: []string{"1.1.1.1", "2401::1"},
 	}
 
 	t.Run("acme-tls", func(t *testing.T) {
@@ -37,6 +38,14 @@ func TestListen(t *testing.T) {
 		require.NoError(t, err)
 
 		err = used.Close()
+		require.NoError(t, err)
+	})
+
+	t.Run("443", func(t *testing.T) {
+		listener, err := Listen("tcp", "127.0.0.1:443", config)
+		require.NoError(t, err)
+
+		err = listener.Close()
 		require.NoError(t, err)
 	})
 }
