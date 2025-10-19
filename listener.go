@@ -163,6 +163,7 @@ func (l *acListener) stopChallenge(ctx context.Context) error {
 }
 
 func (l *acListener) trigger() {
+	time.Sleep(time.Second) // for test
 	l.preprovision()
 	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for {
