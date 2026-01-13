@@ -44,6 +44,16 @@ func Listen(network, address string, config *Config) (net.Listener, error) {
 
 // ListenContext is used to listen a TLS listener with context.
 func ListenContext(ctx context.Context, network, address string, config *Config) (net.Listener, error) {
+	listener, err := listenContext(ctx, network, address)
+	if err != nil {
+		return nil, err
+	}
+	return NewListener(ctx, listener, network, config)
+}
+
+// NewListener is used to create ACME listener from income listener.
+func NewListener(ctx context.Context, l net.Listener, network string, config *Config) (net.Listener, error) {
+	address := l.Addr().String()
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -62,13 +72,9 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 			cache = certmgr.DirCache("certs")
 		}
 	}
-	listener, err := listenContext(ctx, network, address)
-	if err != nil {
-		return nil, err
-	}
 	tl := &acListener{
 		hosts:    allowList,
-		listener: listener,
+		listener: l,
 	}
 	manager := &certmgr.Manager{
 		Prompt:       certmgr.AcceptTOS,
