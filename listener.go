@@ -17,10 +17,11 @@ import (
 
 // Config contains configuration about ACME Manager.
 type Config struct {
-	Domains []string
-	IPAddrs []string
-	Cache   certmgr.Cache
-	Client  *acme.Client
+	Domains   []string
+	IPAddrs   []string
+	Cache     certmgr.Cache
+	Client    *acme.Client
+	TLSConfig *tls.Config
 }
 
 type acListener struct {
@@ -72,10 +73,16 @@ func NewListener(ctx context.Context, l net.Listener, network string, config *Co
 			cache = certmgr.DirCache("certs")
 		}
 	}
-	tl := &acListener{
-		hosts:    allowList,
-		listener: l,
+	tlsConfig := config.TLSConfig
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{}
 	}
+	tl := &acListener{
+		hosts:     allowList,
+		listener:  l,
+		tlsConfig: tlsConfig.Clone(),
+	}
+	tl.ctx, tl.cancel = context.WithCancel(context.Background())
 	manager := &certmgr.Manager{
 		Prompt:       certmgr.AcceptTOS,
 		HostPolicy:   certmgr.HostWhitelist(allowList...),
@@ -85,15 +92,16 @@ func NewListener(ctx context.Context, l net.Listener, network string, config *Co
 		AfterVerify:  tl.stopChallenge,
 	}
 	tl.manager = manager
-	tl.tlsConfig = manager.TLSConfig()
-	tl.ctx, tl.cancel = context.WithCancel(context.Background())
+	tl.tlsConfig.GetCertificate = manager.GetCertificate
 	// dont need port map or HTTP01
 	if strings.Contains(address, ":443") {
+		tl.adjustNextProtos()
 		go tl.trigger()
 		return tl, nil
 	}
 	err = tryBindPort(ctx, "443")
 	if err == nil {
+		tl.adjustNextProtos()
 		tl.portmap = newPortmap(network, port)
 		go tl.trigger()
 		return tl, nil
@@ -105,6 +113,11 @@ func NewListener(ctx context.Context, l net.Listener, network string, config *Co
 		return tl, nil
 	}
 	return nil, errors.New("failed to bind port 443 and 80 for ACME")
+}
+
+func listenContext(ctx context.Context, network, address string) (net.Listener, error) {
+	var lc net.ListenConfig
+	return lc.Listen(ctx, network, address)
 }
 
 func tryBindPort(ctx context.Context, port string) error {
@@ -143,9 +156,8 @@ func tryBindListener(ctx context.Context, port string) (net.Listener, error) {
 	return nil, fmt.Errorf("failed to bind listener on port: %s", port)
 }
 
-func listenContext(ctx context.Context, network, address string) (net.Listener, error) {
-	var lc net.ListenConfig
-	return lc.Listen(ctx, network, address)
+func (l *acListener) adjustNextProtos() {
+	l.tlsConfig.NextProtos = append(l.tlsConfig.NextProtos, acme.ALPNProto)
 }
 
 func (l *acListener) startChallenge(ctx context.Context) error {
