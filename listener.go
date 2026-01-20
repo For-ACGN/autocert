@@ -212,19 +212,20 @@ func (l *acListener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	tcpConn := conn.(*net.TCPConn)
-
-	// Because Listener is a convenience function, help out with
-	// this too.  This is not possible for the caller to set once
-	// we return a *tcp.Conn wrapping an inaccessible net.Conn.
-	// If callers don't want this, they can do things the manual
-	// way and tweak as needed. But this is what net/http does
-	// itself, so copy that. If net/http changes, we can change
-	// here too.
-	_ = tcpConn.SetKeepAlive(true)
-	_ = tcpConn.SetKeepAlivePeriod(3 * time.Minute)
-
-	return tls.Server(tcpConn, l.tlsConfig), nil
+	tcpConn, ok := conn.(*net.TCPConn)
+	if ok {
+		// Because Listener is a convenience function, help out with
+		// this too.  This is not possible for the caller to set once
+		// we return a *tcp.Conn wrapping an inaccessible net.Conn.
+		// If callers don't want this, they can do things the manual
+		// way and tweak as needed. But this is what net/http does
+		// itself, so copy that. If net/http changes, we can change
+		// here too.
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetNoDelay(true)
+		return tls.Server(tcpConn, l.tlsConfig), nil
+	}
+	return tls.Server(conn, l.tlsConfig), nil
 }
 
 func (l *acListener) Addr() net.Addr {
