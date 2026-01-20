@@ -2,21 +2,21 @@ package autocert
 
 import (
 	"context"
-	"io"
+	"crypto/tls"
 	"net"
+
+	"github.com/For-ACGN/autocert/acme"
 )
 
+type getCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+
 type portmap struct {
-	network  string
-	port     string
+	getCert  getCertificate
 	listener net.Listener
 }
 
-func newPortmap(network, port string) *portmap {
-	return &portmap{
-		network: network,
-		port:    port,
-	}
+func newPortmap(getCert getCertificate) *portmap {
+	return &portmap{getCert: getCert}
 }
 
 func (p *portmap) Start(ctx context.Context) error {
@@ -24,6 +24,11 @@ func (p *portmap) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	cfg := tls.Config{
+		GetCertificate: p.getCert,
+		NextProtos:     []string{acme.ALPNProto},
+	}
+	listener = tls.NewListener(listener, &cfg)
 	p.listener = listener
 	go func() {
 		for {
@@ -31,33 +36,15 @@ func (p *portmap) Start(ctx context.Context) error {
 			if err != nil {
 				return
 			}
-			go p.forward(conn)
+			go p.sendCertificate(conn)
 		}
 	}()
 	return nil
 }
 
-func (p *portmap) forward(conn net.Conn) {
-	var host string
-	switch p.network {
-	case "tcp", "tcp4":
-		host = "127.0.0.1"
-	case "tcp6":
-		host = "::1"
-	}
-	address := net.JoinHostPort(host, p.port)
-	remote, err := net.Dial(p.network, address)
-	if err != nil {
-		return
-	}
-	go func() {
-		defer func() { _ = remote.Close() }()
-		_, _ = io.Copy(conn, remote)
-	}()
-	go func() {
-		defer func() { _ = conn.Close() }()
-		_, _ = io.Copy(remote, conn)
-	}()
+func (p *portmap) sendCertificate(conn net.Conn) {
+	c := conn.(*tls.Conn)
+	_ = c.Handshake()
 }
 
 func (p *portmap) Stop() error {
