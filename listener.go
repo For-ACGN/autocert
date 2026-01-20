@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/For-ACGN/autocert/acme"
@@ -94,15 +94,14 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 	tl.manager = manager
 	tl.tlsConfig.GetCertificate = manager.GetCertificate
 	// dont need port map or HTTP01
-	if strings.Contains(address, ":443") {
+	if port == "443" {
 		tl.adjustNextProtos()
 		go tl.trigger()
 		return tl, nil
 	}
 	err = tryBindPort(ctx, "443")
 	if err == nil {
-		tl.adjustNextProtos()
-		tl.portmap = newPortmap("tcp", port)
+		tl.portmap = newPortmap(manager.GetCertificate)
 		go tl.trigger()
 		return tl, nil
 	}
@@ -112,7 +111,7 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 		go tl.trigger()
 		return tl, nil
 	}
-	return nil, errors.New("failed to bind port 443 and 80 for ACME")
+	return nil, errors.New("failed to bind port 443 or 80 for ACME")
 }
 
 func listenContext(ctx context.Context, network, address string) (net.Listener, error) {
@@ -166,6 +165,7 @@ func (l *acListener) adjustNextProtos() {
 		}
 	}
 	if !hasALPN {
+		np = slices.Clone(np)
 		np = append(np, acme.ALPNProto)
 	}
 	l.tlsConfig.NextProtos = np
