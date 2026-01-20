@@ -49,12 +49,12 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 	if err != nil {
 		return nil, err
 	}
-	return NewListener(ctx, listener, network, config)
+	return NewListener(ctx, listener, config)
 }
 
 // NewListener is used to create ACME listener from income listener.
-func NewListener(ctx context.Context, l net.Listener, network string, config *Config) (net.Listener, error) {
-	address := l.Addr().String()
+func NewListener(ctx context.Context, listener net.Listener, config *Config) (net.Listener, error) {
+	address := listener.Addr().String()
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func NewListener(ctx context.Context, l net.Listener, network string, config *Co
 	}
 	tl := &acListener{
 		hosts:     allowList,
-		listener:  l,
+		listener:  listener,
 		tlsConfig: tlsConfig.Clone(),
 	}
 	tl.ctx, tl.cancel = context.WithCancel(context.Background())
@@ -102,7 +102,7 @@ func NewListener(ctx context.Context, l net.Listener, network string, config *Co
 	err = tryBindPort(ctx, "443")
 	if err == nil {
 		tl.adjustNextProtos()
-		tl.portmap = newPortmap(network, port)
+		tl.portmap = newPortmap("tcp", port)
 		go tl.trigger()
 		return tl, nil
 	}
@@ -157,7 +157,18 @@ func tryBindListener(ctx context.Context, port string) (net.Listener, error) {
 }
 
 func (l *acListener) adjustNextProtos() {
-	l.tlsConfig.NextProtos = append(l.tlsConfig.NextProtos, acme.ALPNProto)
+	np := l.tlsConfig.NextProtos
+	var hasALPN bool
+	for _, proto := range np {
+		if proto == acme.ALPNProto {
+			hasALPN = true
+			break
+		}
+	}
+	if !hasALPN {
+		np = append(np, acme.ALPNProto)
+	}
+	l.tlsConfig.NextProtos = np
 }
 
 func (l *acListener) startChallenge(ctx context.Context) error {
