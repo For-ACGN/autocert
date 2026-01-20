@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
@@ -39,6 +40,9 @@ func main() {
 		config.Client = &acme.Client{
 			DirectoryURL: letsEncryptTestURL,
 		}
+	}
+	config.TLSConfig = &tls.Config{
+		NextProtos: []string{"h2", "http/1.1"},
 	}
 
 	listener, err := autocert.Listen("tcp", lAddr, &config)
