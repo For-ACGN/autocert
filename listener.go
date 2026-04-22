@@ -19,6 +19,8 @@ import (
 type Config struct {
 	Domains   []string
 	IPAddrs   []string
+	ForceALPN bool
+	ForceHTTP bool
 	Cache     certmgr.Cache
 	Client    *acme.Client
 	TLSConfig *tls.Config
@@ -93,6 +95,33 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 	}
 	tl.manager = manager
 	tl.tlsConfig.GetCertificate = manager.GetCertificate
+	// process force mode
+	switch {
+	case config.ForceALPN:
+		if port == "443" {
+			tl.adjustNextProtos()
+			go tl.trigger()
+			return tl, nil
+		}
+		err = tryBindPort(ctx, "443")
+		if err != nil {
+			return nil, err
+		}
+		tl.portmap = newPortmap(manager.GetCertificate)
+		go tl.trigger()
+		return tl, nil
+	case config.ForceHTTP:
+		if port == "80" {
+			return nil, errors.New("cannot bind port 80 when ForceHTTP is enabled")
+		}
+		err = tryBindPort(ctx, "80")
+		if err != nil {
+			return nil, err
+		}
+		tl.http01 = newHTTP01(manager.HTTPHandler(nil))
+		go tl.trigger()
+		return tl, nil
+	}
 	// dont need port map or HTTP01
 	if port == "443" {
 		tl.adjustNextProtos()
