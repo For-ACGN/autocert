@@ -24,11 +24,11 @@ var (
 
 func init() {
 	flag.StringVar(&domain, "domain", "", "set domain for certificate")
-	flag.StringVar(&ipAddr, "ip", "", "set ip address for certificate")
-	flag.StringVar(&lAddr, "l", ":4000", "set http server address")
+	flag.StringVar(&ipAddr, "ipaddr", "", "set ip address for certificate")
+	flag.StringVar(&lAddr, "addr", ":4000", "set http server address")
 	flag.BoolVar(&alpn01, "alpn01", false, "force use alpn01 validate method")
 	flag.BoolVar(&http01, "http01", false, "force use http01 validate method")
-	flag.BoolVar(&test, "t", false, "use test certificate")
+	flag.BoolVar(&test, "test", false, "use test certificate")
 	flag.Parse()
 }
 
@@ -49,7 +49,7 @@ func main() {
 		}
 	}
 	config.TLSConfig = &tls.Config{
-		NextProtos: []string{"h2", "http/1.1"},
+		NextProtos: []string{"http/1.1"},
 	}
 
 	listener, err := autocert.Listen("tcp", lAddr, &config)
