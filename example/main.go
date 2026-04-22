@@ -17,6 +17,8 @@ var (
 	domain string
 	ipAddr string
 	lAddr  string
+	alpn01 bool
+	http01 bool
 	test   bool
 )
 
@@ -24,12 +26,17 @@ func init() {
 	flag.StringVar(&domain, "domain", "", "set domain for certificate")
 	flag.StringVar(&ipAddr, "ip", "", "set ip address for certificate")
 	flag.StringVar(&lAddr, "l", ":4000", "set http server address")
+	flag.BoolVar(&alpn01, "alpn01", false, "force use alpn01 validate method")
+	flag.BoolVar(&http01, "http01", false, "force use http01 validate method")
 	flag.BoolVar(&test, "t", false, "use test certificate")
 	flag.Parse()
 }
 
 func main() {
-	config := autocert.Config{}
+	config := autocert.Config{
+		ForceALPN: alpn01,
+		ForceHTTP: http01,
+	}
 	if domain != "" {
 		config.Domains = []string{domain}
 	}
