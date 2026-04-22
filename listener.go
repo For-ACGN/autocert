@@ -33,8 +33,8 @@ type acListener struct {
 	manager   *certmgr.Manager
 	tlsConfig *tls.Config
 
-	portmap *portmap
-	http01  *http01
+	tls01  *tls01
+	http01 *http01
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -107,7 +107,7 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 		if err != nil {
 			return nil, err
 		}
-		tl.portmap = newPortmap(manager.GetCertificate)
+		tl.tls01 = newTLS01(manager.GetCertificate)
 		go tl.trigger()
 		return tl, nil
 	case config.ForceHTTP:
@@ -122,7 +122,7 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 		go tl.trigger()
 		return tl, nil
 	}
-	// dont need port map or HTTP01
+	// don't need extra TLS listener or HTTP01 server
 	if port == "443" {
 		tl.adjustNextProtos()
 		go tl.trigger()
@@ -130,7 +130,7 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 	}
 	err = tryBindPort(ctx, "443")
 	if err == nil {
-		tl.portmap = newPortmap(manager.GetCertificate)
+		tl.tls01 = newTLS01(manager.GetCertificate)
 		go tl.trigger()
 		return tl, nil
 	}
@@ -201,20 +201,20 @@ func (l *acListener) adjustNextProtos() {
 }
 
 func (l *acListener) startChallenge(ctx context.Context) error {
-	if l.portmap != nil {
-		return l.portmap.Start(ctx)
-	}
-	if l.http01 != nil {
+	switch {
+	case l.tls01 != nil:
+		return l.tls01.Start(ctx)
+	case l.http01 != nil:
 		return l.http01.Start(ctx)
 	}
 	return nil
 }
 
 func (l *acListener) stopChallenge(ctx context.Context) error {
-	if l.portmap != nil {
-		return l.portmap.Stop()
-	}
-	if l.http01 != nil {
+	switch {
+	case l.tls01 != nil:
+		return l.tls01.Stop()
+	case l.http01 != nil:
 		return l.http01.Stop(ctx)
 	}
 	return nil
