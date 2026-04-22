@@ -10,16 +10,16 @@ import (
 
 type getCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 
-type portmap struct {
+type tls01 struct {
 	getCert  getCertificate
 	listener net.Listener
 }
 
-func newPortmap(getCert getCertificate) *portmap {
-	return &portmap{getCert: getCert}
+func newTLS01(getCert getCertificate) *tls01 {
+	return &tls01{getCert: getCert}
 }
 
-func (p *portmap) Start(ctx context.Context) error {
+func (p *tls01) Start(ctx context.Context) error {
 	listener, err := tryBindListener(ctx, "443")
 	if err != nil {
 		return err
@@ -28,25 +28,25 @@ func (p *portmap) Start(ctx context.Context) error {
 		GetCertificate: p.getCert,
 		NextProtos:     []string{acme.ALPNProto},
 	}
-	listener = tls.NewListener(listener, &cfg)
-	p.listener = listener
+	p.listener = tls.NewListener(listener, &cfg)
 	go func() {
 		for {
-			conn, err := listener.Accept()
+			conn, err := p.listener.Accept()
 			if err != nil {
 				return
 			}
-			go p.sendCertificate(conn)
+			go p.handshake(conn)
 		}
 	}()
 	return nil
 }
 
-func (p *portmap) sendCertificate(conn net.Conn) {
+func (p *tls01) handshake(conn net.Conn) {
 	c := conn.(*tls.Conn)
 	_ = c.Handshake()
+	_ = c.Close()
 }
 
-func (p *portmap) Stop() error {
+func (p *tls01) Stop() error {
 	return p.listener.Close()
 }
