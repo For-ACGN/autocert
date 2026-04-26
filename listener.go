@@ -26,7 +26,8 @@ type Config struct {
 	TLSConfig *tls.Config
 }
 
-type acListener struct {
+// Listener is the ACME listener, it will wrap the connection.
+type Listener struct {
 	hosts []string
 
 	listener  net.Listener
@@ -41,12 +42,12 @@ type acListener struct {
 }
 
 // Listen is used to listen a TLS listener with ACME.
-func Listen(network, address string, config *Config) (net.Listener, error) {
+func Listen(network, address string, config *Config) (*Listener, error) {
 	return ListenContext(context.Background(), network, address, config)
 }
 
 // ListenContext is used to listen a TLS listener with context.
-func ListenContext(ctx context.Context, network, address string, config *Config) (net.Listener, error) {
+func ListenContext(ctx context.Context, network, address string, config *Config) (*Listener, error) {
 	listener, err := listenContext(ctx, network, address)
 	if err != nil {
 		return nil, err
@@ -55,7 +56,7 @@ func ListenContext(ctx context.Context, network, address string, config *Config)
 }
 
 // NewListener is used to create ACME listener from income listener.
-func NewListener(ctx context.Context, listener net.Listener, config *Config) (net.Listener, error) {
+func NewListener(ctx context.Context, listener net.Listener, config *Config) (*Listener, error) {
 	address := listener.Addr().String()
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
@@ -79,7 +80,7 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (ne
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{}
 	}
-	tl := &acListener{
+	tl := &Listener{
 		hosts:     allowList,
 		listener:  listener,
 		tlsConfig: tlsConfig.Clone(),
@@ -184,7 +185,7 @@ func tryBindListener(ctx context.Context, port string) (net.Listener, error) {
 	return nil, fmt.Errorf("failed to bind listener on port: %s", port)
 }
 
-func (l *acListener) adjustNextProtos() {
+func (l *Listener) adjustNextProtos() {
 	np := l.tlsConfig.NextProtos
 	var hasALPN bool
 	for _, proto := range np {
@@ -200,7 +201,7 @@ func (l *acListener) adjustNextProtos() {
 	l.tlsConfig.NextProtos = np
 }
 
-func (l *acListener) startChallenge(ctx context.Context) error {
+func (l *Listener) startChallenge(ctx context.Context) error {
 	switch {
 	case l.tls01 != nil:
 		return l.tls01.Start(ctx)
@@ -210,7 +211,7 @@ func (l *acListener) startChallenge(ctx context.Context) error {
 	return nil
 }
 
-func (l *acListener) stopChallenge(ctx context.Context) error {
+func (l *Listener) stopChallenge(ctx context.Context) error {
 	switch {
 	case l.tls01 != nil:
 		return l.tls01.Stop()
@@ -220,7 +221,7 @@ func (l *acListener) stopChallenge(ctx context.Context) error {
 	return nil
 }
 
-func (l *acListener) trigger() {
+func (l *Listener) trigger() {
 	time.Sleep(time.Second) // for test
 	l.preprovision()
 	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -235,7 +236,7 @@ func (l *acListener) trigger() {
 	}
 }
 
-func (l *acListener) preprovision() {
+func (l *Listener) preprovision() {
 	for _, host := range l.hosts {
 		hello := &tls.ClientHelloInfo{
 			ServerName: host,
@@ -247,7 +248,7 @@ func (l *acListener) preprovision() {
 	}
 }
 
-func (l *acListener) Accept() (net.Conn, error) {
+func (l *Listener) Accept() (net.Conn, error) {
 	conn, err := l.listener.Accept()
 	if err != nil {
 		return nil, err
@@ -268,11 +269,11 @@ func (l *acListener) Accept() (net.Conn, error) {
 	return tls.Server(conn, l.tlsConfig), nil
 }
 
-func (l *acListener) Addr() net.Addr {
+func (l *Listener) Addr() net.Addr {
 	return l.listener.Addr()
 }
 
-func (l *acListener) Close() error {
+func (l *Listener) Close() error {
 	l.cancel()
 	return l.listener.Close()
 }
