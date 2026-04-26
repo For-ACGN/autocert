@@ -273,6 +273,16 @@ func (l *Listener) Addr() net.Addr {
 	return l.listener.Addr()
 }
 
+// TLSConfig is used to get internal TLS config.
+func (l *Listener) TLSConfig() *tls.Config {
+	return l.tlsConfig.Clone()
+}
+
+// GetCertificate is the tls.Config.GetCertificate hook.
+func (l *Listener) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return l.manager.GetCertificate(hello)
+}
+
 func (l *Listener) Close() error {
 	l.cancel()
 	return l.listener.Close()
