@@ -49,7 +49,7 @@ func main() {
 		}
 	}
 	config.TLSConfig = &tls.Config{
-		NextProtos: []string{"http/1.1"},
+		NextProtos: []string{"h2", "http/1.1"},
 	}
 
 	listener, err := autocert.Listen("tcp", lAddr, &config)
