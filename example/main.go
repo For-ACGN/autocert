@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -53,6 +54,9 @@ func main() {
 	}
 
 	listener, err := autocert.Listen("tcp", lAddr, &config)
+	checkError(err)
+	fmt.Println("get certificate from ca server")
+	err = listener.Preprovision(context.Background())
 	checkError(err)
 	fmt.Println("bind listener successfully")
 
