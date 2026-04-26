@@ -241,6 +241,7 @@ func (l *Listener) preprovision() {
 		hello := &tls.ClientHelloInfo{
 			ServerName: host,
 			CipherSuites: []uint16{
+				tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			},
 		}
@@ -271,6 +272,21 @@ func (l *Listener) Accept() (net.Conn, error) {
 
 func (l *Listener) Addr() net.Addr {
 	return l.listener.Addr()
+}
+
+// Preprovision is used to get certificate before accept the first connection.
+func (l *Listener) Preprovision(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		l.preprovision()
+		done <- struct{}{}
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // TLSConfig is used to get internal TLS config.
