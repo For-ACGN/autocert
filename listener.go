@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/For-ACGN/autocert/acme"
@@ -17,13 +18,17 @@ import (
 
 // Config contains configuration about ACME Manager.
 type Config struct {
-	Domains   []string
-	IPAddrs   []string
+	Domains []string
+	IPAddrs []string
+
 	ForceALPN bool
 	ForceHTTP bool
+
 	Cache     certmgr.Cache
 	Client    *acme.Client
 	TLSConfig *tls.Config
+
+	OnCreateCert func(cert *tls.Certificate)
 }
 
 // Listener is the ACME listener, it will wrap the connection.
@@ -37,6 +42,7 @@ type Listener struct {
 	tls01  *tls01
 	http01 *http01
 
+	mu     sync.Mutex
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -93,6 +99,7 @@ func NewListener(ctx context.Context, listener net.Listener, config *Config) (*L
 		Client:       config.Client,
 		BeforeVerify: tl.startChallenge,
 		AfterVerify:  tl.stopChallenge,
+		OnCreateCert: config.OnCreateCert,
 	}
 	tl.manager = manager
 	tl.tlsConfig.GetCertificate = manager.GetCertificate
@@ -237,6 +244,8 @@ func (l *Listener) trigger() {
 }
 
 func (l *Listener) preprovision() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	for _, host := range l.hosts {
 		hello := &tls.ClientHelloInfo{
 			ServerName: host,
@@ -289,14 +298,16 @@ func (l *Listener) Preprovision(ctx context.Context) error {
 	}
 }
 
+// GetCertificate is the tls.Config.GetCertificate hook.
+func (l *Listener) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.manager.GetCertificate(hello)
+}
+
 // TLSConfig is used to get internal TLS config.
 func (l *Listener) TLSConfig() *tls.Config {
 	return l.tlsConfig.Clone()
-}
-
-// GetCertificate is the tls.Config.GetCertificate hook.
-func (l *Listener) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return l.manager.GetCertificate(hello)
 }
 
 func (l *Listener) Close() error {
