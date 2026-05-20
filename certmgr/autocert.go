@@ -182,6 +182,10 @@ type Manager struct {
 	// AfterVerify is used to set a hook after verifyRFC.
 	AfterVerify func(ctx context.Context) error
 
+	// OnCreateCert is used to notice a new certificate
+	// was created, but it needs to wait for CT sync.
+	OnCreateCert func(cert *tls.Certificate)
+
 	clientMu sync.Mutex
 	client   *acme.Client // initialized by acmeClient method
 
@@ -534,13 +538,8 @@ func (m *Manager) cacheGet(ctx context.Context, ck certKey) (*tls.Certificate, e
 }
 
 func (m *Manager) cachePut(ctx context.Context, ck certKey, tlscert *tls.Certificate) error {
-	// wait some time that let CA finish CT sync.
-	if !ck.isToken {
-		select {
-		case <-time.After(30 * time.Second):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	if m.OnCreateCert != nil {
+		m.OnCreateCert(tlscert)
 	}
 
 	if m.Cache == nil {
