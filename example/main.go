@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/For-ACGN/autocert"
 	"github.com/For-ACGN/autocert/acme"
@@ -51,6 +52,10 @@ func main() {
 	}
 	config.TLSConfig = &tls.Config{
 		NextProtos: []string{"h2", "http/1.1"},
+	}
+	config.OnCreateCert = func(cert *tls.Certificate) {
+		fmt.Println("preprovision certificate, please wait 30 seconds")
+		time.Sleep(30 * time.Second)
 	}
 
 	listener, err := autocert.Listen("tcp", lAddr, &config)
